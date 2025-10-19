@@ -423,3 +423,7 @@ def detect_r_peaks(signal):
     """
     detector = PeakDetector(signal, pd=2, ph=False, th=False)
     return detector.extr['max']  # Trả về các đỉnh tối đa
+
+def savitzky_golay_filter(ecg_signal, window_length, polyorder):
+    y_smooth = signal.savgol_filter(ecg_signal, window_length, polyorder, mode='nearest')
+    return y_smooth
