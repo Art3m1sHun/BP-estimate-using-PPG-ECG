@@ -1,0 +1,425 @@
+import numpy as np
+import scipy.signal as signal
+import pywt
+
+class PeakDetector():
+    """ A peak detect object base on local maximum and local minimum.
+
+    This module will analyse extrema (local maximum and local minimum) from
+    input data, you can apply filters by give vaild argument.
+    
+    
+    Args:
+        *args   - for data, a 1D array/list (Only use args[0] for data).
+        pd      - Peak Distance. The minimum distance of same type extrema (eg.
+                max with max). The unit is data number, so it's integer.
+        ph      - Peak Height relatively. It's difference height of neighboring
+                opposite extrema (eg. max with min).
+                Ignore or set to False to turn off this option.
+        th      - Threshold. It's absolute height of peak. Can be a number,
+                2 element array/list or 2D array/list with 4 element.
+                Ignore or set to False to turn off this option.
+                
+    Args, didn't finish(for developer):
+        adp     - Adaptive, Adapt pd, ph ,etc.
+
+    Attributes (public):
+        analyseTime - log time of peak detection with filters consumption.
+
+    Attributes (private):
+        flt_*   - * can be pd, ph, th, etc. record all filter.
+        
+    """
+    time = 0
+    
+    def __init__(self, *args, pd = 2, ph = False, th= False, adp = False ,
+        measureTime = False ):
+            
+        #self.time = []     # a narray
+        self.data = np.array(args[0]) if len(args) > 0 else np.array([])
+        
+        self.extr = {'min': [] , 'max': []} # index of data for extrema
+        self.extr_rm = {'min':[] ,'max':[]} # index of data for removed extrema
+        
+        self.analyseTime = 0  # analyse() consume time.
+        self.measureTime = measureTime
+        
+        self.adp = adp
+
+        # filter - pd - Peak Distance (minimum)
+        self.flt_pd = int(pd) if pd > 0 else 1
+
+        # Filter - ph - relative Peak Height
+        try :
+            if not ph :
+                self.flt_ph = False
+            if np.ndim(ph) == 0 :
+                self.flt_ph = [ph, 0]
+            elif np.ndim(ph) == 1 and len(ph) == 2 :
+                self.flt_ph = [ph[0], ph[1]]
+        except :
+            self.flt_ph = False
+            print("Relatively height setting error!")
+
+        # Filter - th - Threshold
+        try :
+            if not th :
+                self.flt_th = False
+            elif np.ndim(th) == 0 :
+                # only one number, so min of all extrema
+                self.flt_th = [
+                    [th, np.Inf],
+                    [th, np.Inf]]
+            elif np.ndim(th) == 1:
+                # min and max of all extrema
+                self.flt_th = [
+                    [th[0], th[1]],
+                    [th[0], th[1]]]
+            elif np.ndim(th) == 2:
+                # min and max of each type extrema
+                self.flt_th = [
+                    [th[0][0], th[0][1]],
+                    [th[0][1], th[1][1]]]
+        except:
+            self.flt_th = False
+            print("Threshold dimension error!")
+        
+        # logs
+        self.log_flt_pd = []
+        self.log_flt_ph = []
+        self.log_rs = [[],[]]
+        self.log_std=[[],[]]
+        
+        self.loop_count=0
+
+        if self.measureTime :
+            __class__.time = __import__('time')
+            print('hi',__class__.time.monotonic())
+        
+        if len(self.data) >= 3 :
+            self.analyse()
+    
+    def analyse(self, n=0):
+        """ Peak detect function. only call from class members.
+
+        Args:
+            n   - Start scan location of .data .
+        """
+        
+        if self.measureTime :
+            self.analyseTime = __class__.time.monotonic()
+        if self.adp :
+            self.flt_ph = 1
+            self.log_flt_pd = []
+            self.log_flt_ph = []
+
+        preExtr = { 'i': 0, 'v': 0}
+        blkExtr = { 'i': 0, 'v': 0}
+            
+        # Determine first is max or min
+        dataBlock = self.data[0:self.flt_pd]  # should check boundary in other language.
+        find_max = True if np.argmax(dataBlock) > np.argmin(dataBlock) else False
+        
+        lastExtr = {'min': 0, 'max' : 0}
+        
+        dataLen = len(self.data)
+        #find_max = True    # find min first may ignore code for first max and flt_ph
+        while n < dataLen -1 :
+            self.loop_count += 1
+            #print('loop count = ', loop_count,
+                #'	n = ' ,n, '\tmax' if find_max else '\tmin',
+                #)
+            # record flt_pd when adp
+            if self.adp :
+                self.log_flt_pd.append(self.flt_pd)
+                self.log_flt_ph.append(self.flt_ph)
+
+            # Load a part data to find extrema
+            if n + self.flt_pd > dataLen :
+                dataBlock = self.data[n:]
+            else :
+                dataBlock = self.data[n: n + self.flt_pd ]
+
+            self.log_std[0].append(n)
+            self.log_std[1].append(np.std(self.data[n: n +10]))
+            
+            # Get extrema
+            blkExtr['i'] = np.argmax(dataBlock) if find_max else np.argmin(dataBlock)
+            blkExtr['v'] = dataBlock[blkExtr['i']]
+
+            # Compare last block, move on or save extrema then find opposite extrema.
+            if (blkExtr['v'] >= preExtr['v'] if find_max else
+                blkExtr['v'] <= preExtr['v'] ):
+                preExtr['i'] = blkExtr['i'] + n
+                preExtr['v'] = blkExtr['v']
+                n += self.flt_pd
+            elif preExtr['i'] - lastExtr['max' if find_max else 'min'] < self.flt_pd :
+                # If extrema near last opposite extrema may case two opposite
+                # extrema short then min distance (flt_pd), so check it.
+                preExtr['i'] = blkExtr['i'] + n
+                preExtr['v'] = blkExtr['v']
+                n += self.flt_pd
+            else :
+                self.extr['max' if find_max else 'min'].append(preExtr['i'])
+                n = preExtr['i']
+                lastExtr['max' if find_max else 'min'] = preExtr['i']
+
+                #if loop_count > 5000 :
+                    #break
+                
+                if self.adp :
+                    self.adaptive(find_max,n)
+                    
+                find_max = not find_max
+        # while data seq
+        #self.extr['max' if find_max else 'min'].append(preExtr['i'])
+
+        
+        # filters
+        extrLen = {
+            'max' : len(self.extr['max'],),
+            'min' : len(self.extr['min'])
+        }
+        
+        # filter for flt_ph (relatively height of peak and around local minimum)
+        if self.flt_ph :
+            flt_ph_lower = True if self.flt_ph[0] > 0 else False
+            flt_ph_upper = True if self.flt_ph[1] > 0 else False
+
+            #self.flt_ph.sort()  # make sure [0] < [1]
+            
+            # 2nd extrema type should start from 2nd data
+            if len(self.extr['max']) == 0 or len(self.extr['min']) == 0:
+                # Nếu 1 trong 2 danh sách rỗng, bỏ qua bước này hoặc gán shift mặc định
+                shift = {'max': 0, 'min': 0}
+            elif self.extr['max'][0] > self.extr['min'][0]:
+                shift = {'max': 0, 'min': 1}
+            else:
+                shift = {'max': 1, 'min': 0}
+            
+            for mm in ['max', 'min'] :
+                if mm == 'max' :    # current extrema
+                    mmo = 'min'     # opposite extrema
+                    tmp_sign = 1
+                else :
+                    mmo = 'max'
+                    tmp_sign = -1
+
+                # compare extrema with surround opposite extrema
+                for n in range(extrLen[mm]-shift[mm]) :
+                    tmp_targetPV = self.data[self.extr[mm][n+shift[mm]]]
+                    tmp_surrPV = self.data[self.extr[mmo][n:n+2]]
+                    if len(tmp_surrPV) == 2 :
+                        # lower limit of relative peak height.
+                        if ( flt_ph_lower and
+                            (tmp_sign * (tmp_targetPV - tmp_surrPV[0]) < self.flt_ph[0] or
+                            tmp_sign * (tmp_targetPV - tmp_surrPV[1]) < self.flt_ph[0]
+                        )):
+                            self.extr_rm[mm].append(self.extr[mm][n+shift[mm]])
+
+                        # upper limit of relative peak height.
+                        # difference is ">" and "and" because it's for noise.
+                        if (flt_ph_upper and
+                            tmp_sign * (tmp_targetPV - tmp_surrPV[0]) > self.flt_ph[1] and
+                            tmp_sign * (tmp_targetPV - tmp_surrPV[1]) > self.flt_ph[1] 
+                        ):
+                            self.extr_rm[mm].append(self.extr[mm][n+shift[mm]])
+
+        # filter for threshold
+        if self.flt_th :
+            # flt_th should be 2D array: [[min_low,min_up], [min_low,min_up]] .
+            for extrType in range(2) :
+                extrTypeStr = 'max' if extrType else 'min'
+                extr = np.array(self.extr[extrTypeStr])
+                extr_rm = np.array(self.extr_rm[extrTypeStr],
+                    np.int32)
+                extrData = np.array( self.data[extr] )
+                th_extr_rm = extr[ np.flatnonzero( np.logical_or(
+                    extrData < self.flt_th[extrType][0],
+                    extrData > self.flt_th[extrType][1])
+                )]
+                self.extr_rm[extrTypeStr] = (
+                    np.unique(np.concatenate((extr_rm,th_extr_rm)))  )
+            
+        # the last line of analyse(), record used time
+        if self.measureTime :
+            self.analyseTime = __class__.time.monotonic() - self.analyseTime
+
+    def adaptive(self, find_max,n) :
+        """ adapt pd, ph ,etc. """
+        
+        return # didn't finish
+
+            
+        
+    def update(self, data) :
+        """ Renew data and call analyse. """
+        
+        # check data type
+        if len(data) > 0 :
+            self.data = np.array(data)
+            self.analyse()
+            
+    def append(self, data) :
+        """ Append new data to original data.
+
+        This method didn't finish, so disibled.
+        """
+        if len(data) > 0 :
+            pass
+
+    def clear(self) :
+        """ clear data in object.
+
+        Actually, it's reinitialize object to default setting,
+        include .data and filters.
+        """
+        self.__init__()
+
+
+    # -----------------------
+    # Read attribute or information of extrema.
+    # -----------------------
+    
+    # i,v == max.i , max.v
+    @property
+    def i(self) :
+        return np.setdiff1d(self.extr['max'], self.extr_rm['max'])
+    @property
+    def v(self) :
+        return self.data[np.setdiff1d(self.extr['max'], self.extr_rm['max'])]
+
+    # max i,v
+    @property
+    def max_i(self) :
+        return np.setdiff1d(self.extr['max'], self.extr_rm['max'])
+    @property
+    def max_v(self) :
+        return self.data[np.setdiff1d(self.extr['max'], self.extr_rm['max'])]
+
+    # min i,v
+    @property
+    def min_i(self) :
+        return np.setdiff1d(self.extr['min'], self.extr_rm['min'])
+    @property
+    def min_v(self) :
+        return self.data[np.setdiff1d(self.extr['min'], self.extr_rm['min'])]
+
+    # orig i for min, max
+    @property
+    def orig_max_i(self) :
+        return self.extr['max']
+    @property
+    def orig_min_i(self) :
+        return self.extr['min']
+
+    # rm_max i,v
+    @property
+    def rm_max_i(self) :
+        return self.extr_rm['max']
+    @property
+    def rm_max_v(self) :
+        return self.data[self.extr_rm['max']]
+
+    # rm_min i,v
+    @property
+    def rm_min_i(self) :
+        return self.extr_rm['min']
+    @property
+    def rm_min_v(self) :
+        return self.data[self.extr_rm['min']]
+
+
+    # Read flt_*
+
+def chebyshev_bandpass_filter(ppg_signal, fs=125):
+    """
+    Lọc thông dải Chebyshev II bậc 4, dải 0.5–10 Hz, zero-phase (chuẩn README.md mới).
+    """
+    sos = signal.cheby2(4, 20, [0.5, 10], btype='bandpass', fs=fs, output='sos')
+    filtered_signal = signal.sosfiltfilt(sos, ppg_signal)
+    return filtered_signal
+
+def polynomial_fit_baseline_correction(ppg_signal, degree=3):
+    """
+    Hiệu chỉnh trôi đường nền bằng phép fit đa thức.
+    """
+    x = np.arange(len(ppg_signal))
+    baseline = np.polyval(np.polyfit(x, ppg_signal, degree), x)
+    corrected_signal = ppg_signal - baseline
+    return corrected_signal
+
+def highpass_filter_ecg(ecg_signal, fs=125):
+    """
+    Lọc thông cao bậc 8, cutoff 0.1 Hz, zero-phase (chuẩn README.md mới).
+    """
+    sos = signal.butter(8, 0.1, btype='highpass', fs=fs, output='sos')
+    filtered_signal = signal.sosfiltfilt(sos, ecg_signal)
+    return filtered_signal
+
+def wavelet_denoising_ecg(ecg_signal):
+    """
+    Lọc nhiễu cao tần bằng wavelet db6, level 3, soft-threshold kiểu VisuShrink (chuẩn README.md mới).
+    """
+    coeffs = pywt.wavedec(ecg_signal, 'db6', level=3, mode='symmetric')
+    sigma = np.median(np.abs(coeffs[-1]))/0.6745
+    thr = sigma*np.sqrt(2*np.log(len(ecg_signal)))
+    coeffs[1:] = [pywt.threshold(c, thr, mode='soft') for c in coeffs[1:]]
+    denoised_signal = pywt.waverec(coeffs, 'db6', mode='symmetric')[:len(ecg_signal)]
+    return denoised_signal
+
+def segment_signal(signal, segment_length=8, overlap=0.75, fs=100):
+    """
+    Phân đoạn tín hiệu thành các đoạn ngắn với mức chồng lấp.
+    """
+    step = int(segment_length * fs * (1 - overlap))
+    segments = [signal[i:i + int(segment_length * fs)] for i in range(0, len(signal) - int(segment_length * fs) + 1, step)]
+    return segments
+
+def remove_noisy_segments(segments, sbp_range=(80, 180), dbp_range=(60, 130), hr_range=(40, 220)):
+    """
+    Loại bỏ các đoạn tín hiệu chất lượng kém dựa trên ngưỡng sinh lý.
+    """
+    valid_segments = []
+    for segment in segments:
+        sbp, dbp, hr = extract_features(segment)  # Giả sử có hàm extract_features
+        if sbp_range[0] <= sbp <= sbp_range[1] and dbp_range[0] <= dbp <= dbp_range[1] and hr_range[0] <= hr <= hr_range[1]:
+            valid_segments.append(segment)
+    return valid_segments
+
+def synchronize_ecg_ppg(ecg_segments, ppg_segments):
+    """
+    Đồng bộ nhịp tim giữa ECG và PPG.
+    """
+    synchronized_segments = []
+    for ecg, ppg in zip(ecg_segments, ppg_segments):
+        r_peaks_ecg = detect_r_peaks(ecg)
+        r_peaks_ppg = detect_r_peaks(ppg)
+        # Bỏ qua nếu không phát hiện được đỉnh nào ở 1 trong 2 tín hiệu
+        if len(r_peaks_ecg) == 0 or len(r_peaks_ppg) == 0:
+            continue
+        if len(r_peaks_ecg) == len(r_peaks_ppg):
+            synchronized_segments.append((ecg, ppg))
+    return synchronized_segments
+
+def downsample_segments(segments, factor=4):
+    """
+    Giảm mẫu số lượng đoạn để giảm trùng lặp.
+    """
+    return segments[::factor]
+
+def extract_features(abp_signal):
+    """
+    Trích xuất SBP, DBP, HR từ tín hiệu ABP.
+    """
+    sbp = np.max(abp_signal)
+    dbp = np.min(abp_signal)
+    hr = len(detect_r_peaks(abp_signal))  # Giả sử có hàm detect_r_peaks
+    return sbp, dbp, hr
+
+def detect_r_peaks(signal):
+    """
+    Phát hiện các đỉnh R trong tín hiệu sử dụng PeakDetector.
+    """
+    detector = PeakDetector(signal, pd=2, ph=False, th=False)
+    return detector.extr['max']  # Trả về các đỉnh tối đa
