@@ -12,7 +12,7 @@ from tensorflow.keras.utils import plot_model
 
 # === PHẦN 1: TẢI DỮ LIỆU TỪ FILE H5 ===
 
-file_path = r'D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation\filtered_segments.h5' # <-- THAY ĐỔI ĐƯỜNG DẪN NÀY
+file_path = r"D:\Python\data-ppg-ecg\MATLAB_preprocessing\data\data.h5" # <-- THAY ĐỔI ĐƯỜNG DẪN NÀY
 
 
 ECG_DATASET_NAME = 'ecg_segments'
@@ -80,7 +80,7 @@ learning_rate_reduction = ReduceLROnPlateau(
     min_lr=0.00001
 )
 checkpoint = ModelCheckpoint(
-    r"D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation\BP_estimation.h5", # Thêm đuôi .h5 để lưu file đầy đủ
+    r"D:\Python\data-ppg-ecg\MATLAB_preprocessing\data\BP_data.h5", # Thêm đuôi .h5 để lưu file đầy đủ
     monitor='val_loss', # THAY ĐỔI Ở ĐÂY
     verbose=1,
     save_best_only=True,
@@ -102,7 +102,7 @@ history = model.fit(
     [X_ecg_train, X_ppg_train], # Dữ liệu đầu vào cho training
     y_train,                     # Nhãn cho training
     batch_size=16,               # Số mẫu dữ liệu cho mỗi lần cập nhật trọng số
-    epochs=2000,                   # Số lần lặp lại toàn bộ tập dữ liệu training
+    epochs=1000,                   # Số lần lặp lại toàn bộ tập dữ liệu training
     validation_data=([X_ecg_val, X_ppg_val], y_val),
     callbacks=callbacks
 )
@@ -204,7 +204,7 @@ for i in range(3):
     plt.grid(True)
     plt.legend()
 
-plt.suptitle('So sánh giá trị dự đoán và giá trị thực tế', fontsize=16, y=1.02)
+plt.suptitle('So sánh giá trị dự đoán và giá trị thực tế', fontsize=16, y=1.00)
 plt.tight_layout()
 plt.show()
 

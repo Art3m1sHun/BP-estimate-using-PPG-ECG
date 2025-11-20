@@ -5,18 +5,17 @@ import pywt
 import os
 
 # === Đường dẫn file gộp và file đầu ra ===
-input_path = r"D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation\ALL_PARTS_COMBINED.h5"
-output_path = r"D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation\filtered_segments.h5"
+input_path = r"D:\Python\data-ppg-ecg\MATLAB_preprocessing\data\combined_raw_data.h5"
+output_path = r"D:\Python\data-ppg-ecg\MATLAB_preprocessing\data\data.h5"
 
 # Đọc dữ liệu
 with h5py.File(input_path, 'r') as f:
     print("📂 Dataset trong file:")
-    f.visit(print)
-    data = f['data'][:]  # Đảm bảo trong file có dataset 'data'
-    ppg_raw = data[:, 0]
-    abp_raw = data[:, 1]
-    ecg_raw = data[:, 2]
-
+    f.visit(print) # Lệnh này sẽ in ra tên dataset thực tế!
+    # 1. Truy cập các dataset bằng tên chính xác
+    ppg_raw = f['PPG'][:]  # Lấy tín hiệu PPG (từ SPO2)
+    abp_raw = f['ABP'][:]  # Lấy tín hiệu ABP
+    ecg_raw = f['ECG'][:]  # Lấy tín hiệu ECG
 fs = 125
 
 # --- Tiền xử lý PPG ---

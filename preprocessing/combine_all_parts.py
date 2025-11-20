@@ -36,7 +36,7 @@ all_data = np.vstack(all_data)
 print(f"Tổng shape sau gộp: {all_data.shape}")
 
 # Lưu file gộp
-out_path = r"D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation/ALL_PARTS_COMBINED.h5"
+out_path = r"D:\Python\data-ppg-ecg\cuff+less+blood+pressure+estimation/data_Test/ALL_PARTS_COMBINED.h5"
 with h5py.File(out_path, 'w') as f:
     f.create_dataset('data', data=all_data)
 print(f"Đã lưu file gộp: {out_path}")

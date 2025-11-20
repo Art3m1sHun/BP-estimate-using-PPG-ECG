@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.keras.utils import plot_model
 from tensorflow.keras.layers import (
     Input, Conv1D, MaxPooling1D, concatenate,
     Dense, GlobalAveragePooling1D, BatchNormalization, Dropout
@@ -41,3 +42,7 @@ def model_CNN(input_shape=(1000, 1)):
     # Tạo mô hình hoàn chỉnh
     model = Model(inputs=[ecg_input, ppg_input], outputs=out, name='Two_Scale_LRCN_Model')
     return model
+
+model = model_CNN()
+model.summary()
+plot_model(model, to_file='two_scale_layer_CNN.png', show_shapes=True)
